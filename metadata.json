@@ -1,0 +1,9 @@
+{
+  "name": "CardiaSense AI - Heart Health Intelligence",
+  "description": "A comprehensive heart disease prediction and management platform featuring explainable AI, what-if simulators, clinical reporting, and computer vision analysis for ECG/X-rays.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
