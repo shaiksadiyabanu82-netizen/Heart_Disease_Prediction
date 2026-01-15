@@ -1,15 +1,17 @@
 
 import React, { useState } from 'react';
-import { UserRole, AnalysisState } from './types';
+import { UserRole, AnalysisState, PatientData } from './types';
 import PatientDashboard from './components/PatientDashboard';
 import DoctorDashboard from './components/DoctorDashboard';
+import { INITIAL_PATIENT_DATA } from './constants';
 import { Activity, User, ClipboardList, Menu, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole>(UserRole.PATIENT);
-  const [isSidebarOpen, setSidebarOpen] = useState(false); // Default closed for cleaner mobile start
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   
-  // Lifted state to share between dashboards
+  // Lifted states to share between dashboards
+  const [patientData, setPatientData] = useState<PatientData>(INITIAL_PATIENT_DATA);
   const [analysis, setAnalysis] = useState<AnalysisState>({
     isAnalyzing: false,
     result: null,
@@ -94,7 +96,7 @@ const App: React.FC = () => {
               <div className={`w-fit px-2 py-0.5 rounded-full text-[9px] lg:text-[10px] uppercase font-black tracking-widest border ${
                 role === UserRole.PATIENT ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
               }`}>
-                {role}
+                {role} View
               </div>
             </div>
           </div>
@@ -104,7 +106,7 @@ const App: React.FC = () => {
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">System Status</div>
                 <div className="text-[11px] text-emerald-500 font-bold flex items-center gap-1">
                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                   Live Diagnostics
+                   Active Engine
                 </div>
              </div>
           </div>
@@ -112,8 +114,8 @@ const App: React.FC = () => {
 
         <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full">
           {role === UserRole.PATIENT 
-            ? <PatientDashboard analysis={analysis} /> 
-            : <DoctorDashboard analysis={analysis} setAnalysis={setAnalysis} />}
+            ? <PatientDashboard analysis={analysis} patientData={patientData} /> 
+            : <DoctorDashboard analysis={analysis} setAnalysis={setAnalysis} patientData={patientData} setPatientData={setPatientData} />}
         </main>
       </div>
     </div>

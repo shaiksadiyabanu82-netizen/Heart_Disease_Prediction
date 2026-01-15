@@ -1,13 +1,16 @@
+
 import React, { useState } from 'react';
-import { MapPin, PhoneCall, Mic, Heart, Loader2, Send, Navigation, AlertCircle, ShieldCheck, ExternalLink } from 'lucide-react';
-import { getNearbyHospitals, HospitalResponse } from '../services/geminiService';
-import { AnalysisState } from '../types';
+import { MapPin, PhoneCall, Mic, Heart, Loader2, Send, Navigation, AlertCircle, ShieldCheck, ExternalLink, Activity, Info } from 'lucide-react';
+import { getNearbyHospitals, analyzeSymptoms, HospitalResponse } from '../services/geminiService';
+import { AnalysisState, PatientData } from '../types';
+import { FEATURE_LABELS } from '../constants';
 
 interface PatientDashboardProps {
   analysis: AnalysisState;
+  patientData: PatientData;
 }
 
-const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
+const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis, patientData }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [symptomAnalysis, setSymptomAnalysis] = useState('');
@@ -16,7 +19,6 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
   const [loadingHospitals, setLoadingHospitals] = useState(false);
   const [sosState, setSosState] = useState<'idle' | 'dispatching' | 'sent'>('idle');
 
-  // Derived data for display
   const probability = analysis.result ? analysis.result.probability * 100 : null;
   const riskCategory = probability !== null 
     ? (probability > 60 ? 'High' : probability > 30 ? 'Moderate' : 'Stable')
@@ -25,38 +27,6 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
   const riskColorClass = probability !== null
     ? (probability > 60 ? 'bg-rose-500' : probability > 30 ? 'bg-yellow-400' : 'bg-emerald-500')
     : 'bg-slate-200';
-
-  const startVoiceInput = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      alert("Speech recognition not supported in this browser.");
-      return;
-    }
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    
-    recognition.onstart = () => setIsRecording(true);
-    recognition.onend = () => setIsRecording(false);
-    recognition.onresult = (event: any) => {
-      const current = event.resultIndex;
-      const result = event.results[current][0].transcript;
-      setTranscript(result);
-    };
-    recognition.start();
-  };
-
-  const handleAnalyzeSymptoms = async () => {
-    if (!transcript) return;
-    setAnalyzingSymptoms(true);
-    try {
-      const result = await analyzeSymptoms(transcript);
-      setSymptomAnalysis(result);
-    } catch (e) {
-      setSymptomAnalysis("Error analyzing symptoms. Please consult a doctor directly.");
-    } finally {
-      setAnalyzingSymptoms(false);
-    }
-  };
 
   const fetchHospitals = async () => {
     setLoadingHospitals(true);
@@ -75,6 +45,19 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
     });
   };
 
+  const handleAnalyzeSymptoms = async () => {
+    if (!transcript) return;
+    setAnalyzingSymptoms(true);
+    try {
+      const result = await analyzeSymptoms(transcript);
+      setSymptomAnalysis(result);
+    } catch (e) {
+      setSymptomAnalysis("Error analyzing symptoms.");
+    } finally {
+      setAnalyzingSymptoms(false);
+    }
+  };
+
   const triggerSOS = () => {
     setSosState('dispatching');
     setTimeout(() => {
@@ -85,7 +68,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
 
   return (
     <div className="space-y-6">
-      {/* Risk Summary - DISPLAYED FIRST (Primary User Value) */}
+      {/* 1. HEART PREDICTION (Prioritized first as requested) */}
       <div className="bg-white p-6 lg:p-8 rounded-3xl border border-rose-100 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
           <Heart size={160} className="fill-rose-500 text-rose-500" />
@@ -95,14 +78,14 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              <h3 className="font-bold text-slate-500 uppercase text-xs tracking-[0.2em]">Live Heart Health Prediction</h3>
+              <h3 className="font-bold text-slate-500 uppercase text-xs tracking-[0.2em]">Real-Time Heart Prediction</h3>
             </div>
             {analysis.isAnalyzing ? (
               <div className="flex items-center gap-3 py-4">
                 <Loader2 className="animate-spin text-rose-500" size={32} />
                 <div>
-                  <div className="text-xl font-bold text-slate-800">Updating Analysis...</div>
-                  <div className="text-sm text-slate-400">ML Engine is evaluating clinical markers</div>
+                  <div className="text-xl font-bold text-slate-800">Recalculating Risk...</div>
+                  <div className="text-sm text-slate-400">Processing latest clinical markers</div>
                 </div>
               </div>
             ) : (
@@ -121,8 +104,8 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
                 </div>
                 <p className="text-slate-500 text-sm font-medium">
                   {probability !== null 
-                    ? `This percentage represents your predicted risk for cardiovascular disease.`
-                    : 'Awaiting clinical data input from the Clinical Console.'}
+                    ? `Current likelihood of coronary heart disease based on clinical data.`
+                    : 'Awaiting doctor to update your clinical parameters for a live prediction.'}
                 </p>
               </div>
             )}
@@ -147,39 +130,117 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ analysis }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Emergency Card */}
-        <div className={`p-6 rounded-2xl text-white shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative ${sosState === 'sent' ? 'bg-emerald-600' : 'bg-rose-600 shadow-rose-100'}`}>
-          <div className="absolute -right-4 -bottom-4 opacity-10 pointer-events-none">
-            <PhoneCall size={120} />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-xl">{sosState === 'sent' ? 'Alert Active' : 'Emergency SOS'}</h3>
-              <AlertCircle className={sosState === 'idle' ? 'animate-pulse' : ''} />
+      {/* 2. CLINICAL DATA PROFILE (Synced from Doctor) */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 mb-6">
+          <Activity className="text-indigo-500" size={20} />
+          <h2 className="text-lg font-bold">Your Clinical Profile</h2>
+          <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-2 py-1 rounded">Read Only</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          {(Object.keys(patientData) as Array<keyof PatientData>).map((key) => (
+            <div key={key} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mb-1 truncate w-full">
+                {FEATURE_LABELS[key]}
+              </span>
+              <span className="text-lg font-bold text-slate-700">{patientData[key]}</span>
             </div>
-            <p className="text-sm opacity-90 mb-6 max-w-[80%]">
-              {sosState === 'idle' && "Immediately notify nearest cardiac responders with your location."}
-              {sosState === 'dispatching' && "Identifying your current GPS coordinates..."}
-              {sosState === 'sent' && "Help has been dispatched. Stay calm and keep your phone near."}
-            </p>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400 italic">
+          <Info size={12} />
+          Note: This data is updated by your healthcare provider in the Clinical Console.
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Emergency SOS */}
+        <div className={`p-6 rounded-2xl text-white shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative ${sosState === 'sent' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+          <div className="relative z-10">
+            <h3 className="font-bold text-xl mb-1">Emergency SOS</h3>
+            <p className="text-sm opacity-90 mb-6">Notify responders with your live GPS location immediately.</p>
             <button 
               disabled={sosState !== 'idle'}
-              className={`w-full bg-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 ${sosState === 'sent' ? 'text-emerald-600' : 'text-rose-600'}`}
+              className="w-full bg-white text-rose-600 font-black py-4 rounded-xl shadow-lg active:scale-95 disabled:opacity-50 transition-all"
               onClick={triggerSOS}
             >
-              {sosState === 'idle' && <><PhoneCall size={20} /> Request Dispatch</>}
-              {sosState === 'dispatching' && <><Loader2 className="animate-spin" size={20} /> Dispatching...</>}
-              {sosState === 'sent' && <><ShieldCheck size={20} /> Help Dispatched</>}
+              {sosState === 'idle' ? 'SEND ALARM' : sosState === 'dispatching' ? 'LOCATING...' : 'HELP DISPATCHED'}
             </button>
           </div>
         </div>
 
-        {/* ICU Finder - Maps Grounding Section */}
-        <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-lg flex flex-col justify-between overflow-hidden relative">
-          <div className="absolute -right-4 -bottom-4 opacity-10 pointer-events-none">
-            <MapPin size={120} />
+        {/* ICU Finder */}
+        <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-lg flex flex-col justify-between">
+          <h3 className="font-bold text-xl mb-1">Cardiac Center Locator</h3>
+          <p className="text-sm opacity-90 mb-6">Find the nearest specialized ICU units using Google Maps.</p>
+          <button 
+            onClick={fetchHospitals}
+            disabled={loadingHospitals}
+            className="w-full bg-indigo-500 text-white font-black py-4 rounded-xl shadow-lg hover:bg-indigo-600 active:scale-95 transition-all"
+          >
+            {loadingHospitals ? 'SCANNING...' : 'FIND NEAREST UNIT'}
+          </button>
+        </div>
+      </div>
+
+      {/* Results from Maps/Symptom analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+        {/* Symptom Checker */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
+          <div className="flex items-center gap-2 mb-4">
+            <Mic className="text-indigo-600" size={18} />
+            <h3 className="font-bold">Describe Symptoms</h3>
           </div>
-          <div className="relative z-10">
-            <h3 className="font-bold text-xl mb-2">ICU Finder</h3>
-            <p className="text-sm opacity-90 mb-6 max-w-[
+          <textarea 
+            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
+            placeholder="e.g. Sharp pain in chest area..."
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+          />
+          {symptomAnalysis && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+              {symptomAnalysis}
+            </div>
+          )}
+          <button 
+            onClick={handleAnalyzeSymptoms}
+            disabled={analyzingSymptoms || !transcript}
+            className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl disabled:opacity-50"
+          >
+            {analyzingSymptoms ? 'ANALYZING...' : 'RUN AI CHECK'}
+          </button>
+        </div>
+
+        {/* Hospital List */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col">
+          <div className="flex items-center gap-2 mb-4">
+            <Navigation className="text-emerald-500" size={18} />
+            <h3 className="font-bold">Nearby Assistance</h3>
+          </div>
+          <div className="flex-1 space-y-3">
+            {!hospitalData ? (
+              <div className="h-full flex items-center justify-center text-slate-300 italic text-sm border-2 border-dashed border-slate-50 rounded-xl p-8">
+                Locate units to see verified units
+              </div>
+            ) : (
+              hospitalData.hospitals.map((h, i) => (
+                <a 
+                  key={i} 
+                  href={h.uri} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:shadow-md transition-all group"
+                >
+                  <span className="font-bold text-slate-700 text-sm">{h.title}</span>
+                  <ExternalLink size={14} className="text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </a>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PatientDashboard;
